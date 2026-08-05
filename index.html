@@ -34,6 +34,50 @@ function drawKakaoMarkers(category){if(!kakaoMap)return;kakaoOverlays.forEach(o=
 function showPlaceInfo(p){let box=document.querySelector('#mapInfo');box.style.display='block';box.innerHTML=`<strong>${p.icon} ${p.name}</strong><br><span class="muted">${p.category} · ${p.shortDesc}</span><p style="margin:8px 0">${p.description}</p><small>🕒 추천 체류 ${p.stayMin}분</small><ul style="margin:6px 0;padding-left:18px">${p.tips.map(t=>`<li>${t}</li>`).join('')}</ul><div style="display:flex;gap:7px;margin-top:9px"><button data-place="${p.id}" style="min-height:40px;border:0;border-radius:9px;background:#4A90E2;color:#fff;padding:0 11px">📍 상세 보기</button><button data-directions="${p.id}" style="min-height:40px;border:0;border-radius:9px;background:#4CAF50;color:#fff;padding:0 11px">🗺️ 길찾기</button></div>`}
 document.addEventListener('DOMContentLoaded',()=>{let oldShow=showScreen;showScreen=function(id){oldShow(id);if(id==='map')initKakaoMap()};document.addEventListener('click',e=>{let b=e.target.closest('[data-kakao-place],[data-directions]');if(!b)return;if(b.dataset.directions){let p=byId(b.dataset.directions);window.open(`https://map.kakao.com/link/to/${encodeURIComponent(p.name)},${p.lat},${p.lng}`,'_blank');return}let p=byId(b.dataset.kakaoPlace);let box=document.querySelector('#mapInfo');box.style.display='block';box.innerHTML=`<strong>${p.icon} ${p.name}</strong><br><span class="muted">${p.shortDesc} · ${p.stayMin}분</span><div style="display:flex;gap:7px;margin-top:9px"><button data-place="${p.id}" style="min-height:40px;border:0;border-radius:9px;background:#4A90E2;color:#fff;padding:0 11px">📍 상세 보기</button><button data-directions="${p.id}" style="min-height:40px;border:0;border-radius:9px;background:#4CAF50;color:#fff;padding:0 11px">🗺️ 길찾기</button></div>`});document.addEventListener('click',e=>{let b=e.target.closest('[data-place]');if(!b||!byId(b.dataset.place))return;setTimeout(()=>{let p=byId(b.dataset.place),d=document.querySelector('#detailContent');if(d&&!d.querySelector('[data-detail-actions]'))d.insertAdjacentHTML('beforeend',`<div data-detail-actions style="display:flex;gap:8px;margin:22px 0"><button class="primary" data-nav="map" style="background:#4A90E2">🗺️ 지도에서 보기</button><button class="primary" data-directions="${p.id}" style="background:#4CAF50">🚶 길찾기</button></div>`);},0)});let filters=document.getElementById('mapFilters');if(filters)filters.addEventListener('click',e=>{let b=e.target.closest('[data-map-category]');if(b)drawKakaoMarkers(b.dataset.mapCategory)})});
 </script><script>
+const restrictedZones = [
+  {
+    id: "residential_main",
+    label: "주거·건물 밀집 완충구역",
+    polygon: [
+      { lat: 35.08047708406047, lng: 129.04254273308123 },
+      { lat: 35.0802907784326,  lng: 129.04236816641497 },
+      { lat: 35.07954778362628, lng: 129.04381040311452 },
+      { lat: 35.0791915653077,  lng: 129.04422631302648 },
+      { lat: 35.07902242331874, lng: 129.0443700858277  },
+      { lat: 35.07831113722024, lng: 129.04513340578907 },
+      { lat: 35.07809513896306, lng: 129.04551717731715 },
+      { lat: 35.07799101265367, lng: 129.0458133012952  },
+      { lat: 35.07779195923225, lng: 129.04586040150778 },
+      { lat: 35.07773694062276, lng: 129.04591657967302 },
+      { lat: 35.0775308537978,  lng: 129.04597994729107 },
+      { lat: 35.0767114166713,  lng: 129.04674327840326 },
+      { lat: 35.07661220785295, lng: 129.04701485384248 },
+      { lat: 35.07646694091466, lng: 129.0473455694211  },
+      { lat: 35.07641256937137, lng: 129.04736339442596 },
+      { lat: 35.0756792855669,  lng: 129.04822751354612 },
+      { lat: 35.07583519604855, lng: 129.04846709531708 },
+      { lat: 35.07684764890567, lng: 129.04708102856276 },
+      { lat: 35.07807051237283, lng: 129.04590846659957 },
+      { lat: 35.07903937428924, lng: 129.0449679643839  },
+      { lat: 35.07942721529538, lng: 129.04454736648228 },
+      { lat: 35.07969124166089, lng: 129.04412093442227 },
+      { lat: 35.08022165541165, lng: 129.04299405472887 },
+      { lat: 35.08057636612647, lng: 129.04239995290112 }
+    ]
+  }
+];
+const allowedWalkwayEdges=[];
+const walkNodes=[];
+let restrictedZonePolygons=[],restrictedZoneInfoWindow=null,activeRestrictedZoneId=null,restrictedAlertShown=false;
+function pointInRestrictedPolygon(point,polygon){let inside=false;for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){const xi=polygon[i].lng,yi=polygon[i].lat,xj=polygon[j].lng,yj=polygon[j].lat;const intersects=((yi>point.lat)!==(yj>point.lat))&&(point.lng<(xj-xi)*(point.lat-yi)/(yj-yi)+xi);if(intersects)inside=!inside}return inside}
+function closeRestrictedAlert(){const alert=document.getElementById('restrictedZoneAlert');if(alert)alert.remove()}
+function showRestrictedAlert(){closeRestrictedAlert();const alert=document.createElement('div');alert.id='restrictedZoneAlert';alert.setAttribute('role','alertdialog');alert.setAttribute('aria-modal','true');alert.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10000;width:min(340px,calc(100% - 36px));padding:22px;border-radius:18px;background:#fff;color:#9f1f1f;box-shadow:0 16px 50px #0005;text-align:center;font-weight:700';alert.innerHTML='<p style="margin:0 0 16px;font-size:17px">🏡 주민 생활 구역입니다. 조용히 이동해 주세요.</p><button type="button" style="width:100%;min-height:48px;border:0;border-radius:13px;background:#d93636;color:#fff;font-weight:700">확인</button>';alert.querySelector('button').onclick=closeRestrictedAlert;document.body.appendChild(alert);alert.querySelector('button').focus()}
+function checkRestrictedZones(position){if(!position)return;const point={lat:typeof position.getLat==='function'?position.getLat():position.lat,lng:typeof position.getLng==='function'?position.getLng():position.lng};const zone=restrictedZones.find(item=>pointInRestrictedPolygon(point,item.polygon));const app=document.querySelector('.app');if(zone){if(app)app.style.border='4px solid #FF9F55';if(activeRestrictedZoneId!==zone.id){activeRestrictedZoneId=zone.id;restrictedAlertShown=false;closeRestrictedAlert()}if(!restrictedAlertShown){restrictedAlertShown=true;try{if(navigator.vibrate)navigator.vibrate([200,100,200])}catch(error){}showRestrictedAlert()}}else{activeRestrictedZoneId=null;restrictedAlertShown=false;if(app)app.style.border='';closeRestrictedAlert()}}
+function renderRestrictedZones(){if(!kakaoMap||restrictedZonePolygons.length)return;restrictedZones.forEach(zone=>{const polygon=new kakao.maps.Polygon({map:kakaoMap,path:zone.polygon.map(point=>new kakao.maps.LatLng(point.lat,point.lng)),strokeWeight:2,strokeColor:'#ff4444',strokeOpacity:1,fillColor:'#ff0000',fillOpacity:.12});kakao.maps.event.addListener(polygon,'click',event=>{if(restrictedZoneInfoWindow)restrictedZoneInfoWindow.close();restrictedZoneInfoWindow=new kakao.maps.InfoWindow({position:event.latLng,content:'<div style="width:260px;padding:12px;line-height:1.5">🏡 주거 밀집 구역입니다. 공공 보행로를 이용해 주세요.</div>',removable:true});restrictedZoneInfoWindow.open(kakaoMap)});restrictedZonePolygons.push(polygon)});checkRestrictedZones(virtualUserOverlay&&virtualUserOverlay.getPosition?virtualUserOverlay.getPosition():VIRTUAL_USER_POSITION)}
+const initKakaoMapBeforeRestrictedZones=initKakaoMap;
+initKakaoMap=function(){initKakaoMapBeforeRestrictedZones();let attempts=0;const waitForMap=setInterval(()=>{attempts+=1;if(mapReady&&kakaoMap){clearInterval(waitForMap);renderRestrictedZones()}else if(attempts>=50)clearInterval(waitForMap)},100)};
+document.addEventListener('DOMContentLoaded',()=>{document.addEventListener('pointerup',event=>{const target=event.target instanceof Element?event.target.closest('[title="눌러서 가상 사용자 위치 이동"]'):null;if(!target)return;setTimeout(()=>checkRestrictedZones(virtualUserOverlay&&virtualUserOverlay.getPosition?virtualUserOverlay.getPosition():null),0)},true)});
+</script><script>
 const UPDATED_PLACES=[
 {id:'view', name:'흰여울전망대', category:'명소', icon:'🗺️', lat:35.075809468258925, lng:129.04838971773611, shortDesc:'남항대교와 영도 바다 전망', description:'부산 영도 바다와 남항대교를 가장 넓은 시야로 감상할 수 있는 명소입니다. 마을 산책의 출발점이자 탁 트인 바다 배경으로 인증샷을 남기기 좋습니다.', tips:['탁 트인 전망 감상','인증샷 촬영 추천','마을 산책 출발점'], stayMin:15},
   {id:'main', name:'메인', category:'카페', icon:'☕', lat:35.075891636003384, lng:129.04806016985705, shortDesc:'창가 통유리 오션뷰 카페', description:'바다 바로 앞에 위치해 시원한 오션뷰를 보며 음료를 즐길 수 있는 카페입니다. 여유로운 분위기에서 바다멍을 때리기 좋은 곳입니다.', tips:['창가 자리 추천','오션뷰 감상'], stayMin:30},
